@@ -151,6 +151,54 @@ New-Item -ItemType Directory -Force -Path .\outputs | Out-Null
 Copy-Item -Force .\target\release\claude-code-usage-monitor.exe .\outputs\claude-code-usage-monitor.exe
 ```
 
+## Automatic Custom Builds
+
+This branch includes `.github/workflows/custom-build.yml`.
+
+When `claude-desktop-history-fallback` is pushed to your own GitHub repository, GitHub Actions will:
+
+1. Run `cargo test`.
+2. Run `cargo build --release`.
+3. Move the `custom-latest` tag to the pushed commit.
+4. Replace the `custom-latest` prerelease.
+5. Upload `claude-code-usage-monitor.exe` as the release asset.
+
+No extra GitHub secret is required for this workflow. It uses the built-in `GITHUB_TOKEN` with `contents: write`.
+
+Your repository settings must allow GitHub Actions to write repository contents:
+
+```text
+Settings -> Actions -> General -> Workflow permissions -> Read and write permissions
+```
+
+After adding your fork as `origin`, push the branch:
+
+```powershell
+git push -u origin claude-desktop-history-fallback
+```
+
+The custom release asset will be available at:
+
+```text
+https://github.com/OWNER/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe
+```
+
+Replace `OWNER` with your GitHub username or organization.
+
+## Installing The Custom Build
+
+From a local clone:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-custom.ps1 -Repo OWNER/Claude-Code-Usage-Monitor
+```
+
+Directly from GitHub:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/OWNER/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo OWNER/Claude-Code-Usage-Monitor
+```
+
 Confirm line endings and whitespace:
 
 ```powershell

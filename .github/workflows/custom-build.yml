@@ -1,0 +1,55 @@
+name: Custom Branch Build
+
+on:
+  push:
+    branches:
+      - claude-desktop-history-fallback
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: custom-latest
+  RELEASE_ASSET_NAME: claude-code-usage-monitor.exe
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Stage release asset
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item -Force target/release/${{ env.RELEASE_ASSET_NAME }} dist/${{ env.RELEASE_ASSET_NAME }}
+
+      - name: Replace custom release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          gh release view $env:RELEASE_TAG 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release delete $env:RELEASE_TAG --yes --cleanup-tag
+          }
+
+          git tag -f $env:RELEASE_TAG $env:GITHUB_SHA
+          git push --force origin "refs/tags/$env:RELEASE_TAG"
+          gh release create $env:RELEASE_TAG `
+            dist/${{ env.RELEASE_ASSET_NAME }} `
+            --title "Custom latest build" `
+            --notes "Automated build from $env:GITHUB_REF_NAME at commit $env:GITHUB_SHA." `
+            --prerelease

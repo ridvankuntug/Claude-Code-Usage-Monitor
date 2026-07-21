@@ -219,6 +219,22 @@ Copy-Item -Force .\target\release\claude-code-usage-monitor.exe .\outputs\claude
 
 To carry the Claude Desktop history fallback forward after upstream updates, follow the local maintenance guide in [`docs/claude-desktop-history-fallback-maintenance.md`](docs/claude-desktop-history-fallback-maintenance.md).
 
+## Custom Branch Builds
+
+This fork can publish a custom portable build from the `claude-desktop-history-fallback` branch. After pushing that branch to your own GitHub repository, the **Custom Branch Build** workflow builds the app on Windows and replaces the `custom-latest` prerelease asset.
+
+Install that custom build with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-custom.ps1 -Repo OWNER/Claude-Code-Usage-Monitor
+```
+
+Or run it directly from GitHub after replacing `OWNER` with your GitHub username:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/OWNER/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo OWNER/Claude-Code-Usage-Monitor
+```
+
 ## Open Source
 
 This project is licensed under MIT.
