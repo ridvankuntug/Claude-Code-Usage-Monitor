@@ -2,7 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -53,6 +53,25 @@ struct UsageResponse {
 struct UsageBucket {
     utilization: f64,
     resets_at: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ClaudeDesktopPlanUsageHistory {
+    #[serde(rename = "version")]
+    _version: Option<u32>,
+    samples: Vec<ClaudeDesktopPlanUsageSample>,
+}
+
+#[derive(Deserialize)]
+struct ClaudeDesktopPlanUsageSample {
+    t: i64,
+    u: ClaudeDesktopPlanUsage,
+}
+
+#[derive(Deserialize)]
+struct ClaudeDesktopPlanUsage {
+    fh: Option<f64>,
+    sd: Option<f64>,
 }
 
 #[derive(Deserialize)]
@@ -242,6 +261,18 @@ fn poll_with(
 }
 
 fn poll_claude_code() -> Result<UsageData, PollError> {
+    match poll_claude_code_oauth() {
+        Ok(data) => Ok(data),
+        Err(error) => {
+            diagnose::log(format!(
+                "Claude Code OAuth usage poll failed: {error:?}; trying Claude Desktop history"
+            ));
+            read_claude_desktop_usage().ok_or(error)
+        }
+    }
+}
+
+fn poll_claude_code_oauth() -> Result<UsageData, PollError> {
     let creds = match read_first_credentials() {
         Some(c) => c,
         None => {
@@ -798,6 +829,92 @@ fn parse_rate_limit_headers(response: &ureq::Response) -> UsageData {
     }
 
     data
+}
+
+fn read_claude_desktop_usage() -> Option<UsageData> {
+    for path in claude_desktop_history_paths() {
+        let content = match std::fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(_) => continue,
+        };
+
+        if let Some(data) = claude_desktop_usage_from_history(&content) {
+            diagnose::log(format!(
+                "using Claude Desktop usage history at {}",
+                path.display()
+            ));
+            return Some(data);
+        }
+    }
+
+    None
+}
+
+fn claude_desktop_history_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    if let Some(appdata) = std::env::var_os("APPDATA").map(PathBuf::from) {
+        paths.push(appdata.join("Claude").join("plan-usage-history.json"));
+    } else if let Some(appdata) = dirs::data_dir() {
+        paths.push(appdata.join("Claude").join("plan-usage-history.json"));
+    }
+
+    if let Some(local_appdata) = local_appdata_dir() {
+        paths.push(
+            local_appdata
+                .join("Claude")
+                .join("plan-usage-history.json"),
+        );
+        paths.extend(claude_desktop_packaged_history_paths(&local_appdata));
+    }
+
+    paths
+}
+
+fn local_appdata_dir() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .or_else(dirs::data_local_dir)
+}
+
+fn claude_desktop_packaged_history_paths(local_appdata: &Path) -> Vec<PathBuf> {
+    let packages_dir = local_appdata.join("Packages");
+    let entries = match std::fs::read_dir(packages_dir) {
+        Ok(entries) => entries,
+        Err(_) => return Vec::new(),
+    };
+
+    entries
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("Claude_"))
+        })
+        .map(|path| {
+            path.join("LocalCache")
+                .join("Roaming")
+                .join("Claude")
+                .join("plan-usage-history.json")
+        })
+        .collect()
+}
+
+fn claude_desktop_usage_from_history(content: &str) -> Option<UsageData> {
+    let history: ClaudeDesktopPlanUsageHistory = serde_json::from_str(content).ok()?;
+    let sample = history.samples.into_iter().max_by_key(|sample| sample.t)?;
+
+    Some(UsageData {
+        session: UsageSection {
+            percentage: sample.u.fh?.clamp(0.0, 100.0),
+            resets_at: None,
+        },
+        weekly: UsageSection {
+            percentage: sample.u.sd?.clamp(0.0, 100.0),
+            resets_at: None,
+        },
+    })
 }
 
 fn fetch_codex_usage(token: &str, account_id: Option<&str>) -> Result<UsageData, PollError> {
@@ -1659,6 +1776,43 @@ mod tests {
         .expect_err("all-provider failure should return an error");
 
         assert_eq!(error, PollError::AuthRequired);
+    }
+
+    #[test]
+    fn claude_desktop_history_uses_latest_sample_by_timestamp() {
+        let usage = claude_desktop_usage_from_history(
+            r#"{
+                "version": 2,
+                "samples": [
+                    { "t": 200, "org": "newer", "u": { "fh": 42, "sd": 31 } },
+                    { "t": 100, "org": "older", "u": { "fh": 99, "sd": 88 } }
+                ]
+            }"#,
+        )
+        .expect("history should parse");
+
+        assert_eq!(usage.session.percentage, 42.0);
+        assert_eq!(usage.weekly.percentage, 31.0);
+        assert!(usage.session.resets_at.is_none());
+        assert!(usage.weekly.resets_at.is_none());
+    }
+
+    #[test]
+    fn claude_desktop_history_clamps_percentages() {
+        let usage = claude_desktop_usage_from_history(
+            r#"{
+                "version": 2,
+                "samples": [
+                    { "t": 100, "org": "org", "u": { "fh": -10, "sd": 150 } }
+                ]
+            }"#,
+        )
+        .expect("history should parse");
+
+        assert_eq!(usage.session.percentage, 0.0);
+        assert_eq!(usage.weekly.percentage, 100.0);
+        assert!(usage.session.resets_at.is_none());
+        assert!(usage.weekly.resets_at.is_none());
     }
 
     #[test]

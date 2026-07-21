@@ -126,6 +126,7 @@ What the app reads:
 
 - Your local Claude Code OAuth credentials from `~/.claude/.credentials.json`
 - If needed, the same credentials file inside an installed WSL distro
+- If Claude Code credentials are unavailable, Claude Desktop usage history from `plan-usage-history.json`
 - If Codex is enabled, your local Codex credentials from `$CODEX_HOME/auth.json` or `~/.codex/auth.json`
 - If Antigravity is enabled, your local Antigravity OAuth token from Windows Credential Manager target `gemini:antigravity`
 
@@ -154,6 +155,7 @@ What it does **not** do:
 - It does not collect analytics or telemetry
 - It does not upload your project files
 - It does not directly edit your Codex credentials file
+- It does not read Claude Desktop tokens, cookies, Local Storage, or `Network\Cookies`
 
 Notes:
 
@@ -174,6 +176,48 @@ The monitor:
 5. Refreshes periodically in the background
 
 If the newer usage endpoint is unavailable, it can fall back to reading the rate-limit headers returned by Claude's Messages API.
+
+If Claude Code OAuth credentials are unavailable, it can also fall back to Claude Desktop's local usage history file:
+
+```text
+%APPDATA%\Claude\plan-usage-history.json
+%LOCALAPPDATA%\Claude\plan-usage-history.json
+%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\plan-usage-history.json
+```
+
+The fallback reads the newest sample by `t`, maps `u.fh` to the 5-hour usage percentage, maps `u.sd` to the 7-day usage percentage, clamps both values to `0..100`, and leaves reset times empty because that file does not include exact reset timestamps.
+
+## Build From Source On Windows
+
+Install the required build tools:
+
+```powershell
+winget install --source winget --id Rustlang.Rustup -e --accept-package-agreements --accept-source-agreements --silent
+winget install --source winget --id Microsoft.VisualStudio.2022.BuildTools -e --accept-package-agreements --accept-source-agreements --silent --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+```
+
+Open an x64 MSVC build environment, then run the normal Rust commands:
+
+```powershell
+cmd.exe /d /s /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && "%USERPROFILE%\.cargo\bin\cargo.exe" test'
+cmd.exe /d /s /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && "%USERPROFILE%\.cargo\bin\cargo.exe" build --release'
+```
+
+If Cargo cannot download crates because Windows cannot check certificate revocation, set Cargo's revocation check flag for that command:
+
+```powershell
+cmd.exe /d /s /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && set CARGO_HTTP_CHECK_REVOKE=false&& "%USERPROFILE%\.cargo\bin\cargo.exe" test'
+cmd.exe /d /s /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && set CARGO_HTTP_CHECK_REVOKE=false&& "%USERPROFILE%\.cargo\bin\cargo.exe" build --release'
+```
+
+Copy the portable executable after a successful release build:
+
+```powershell
+New-Item -ItemType Directory -Force -Path .\outputs | Out-Null
+Copy-Item -Force .\target\release\claude-code-usage-monitor.exe .\outputs\claude-code-usage-monitor.exe
+```
+
+To carry the Claude Desktop history fallback forward after upstream updates, follow the local maintenance guide in [`docs/claude-desktop-history-fallback-maintenance.md`](docs/claude-desktop-history-fallback-maintenance.md).
 
 ## Open Source
 

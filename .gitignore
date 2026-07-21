@@ -1,5 +1,6 @@
 # Rust build artifacts
 /target/
+/outputs/
 
 # Cargo lock (optional for binaries, included by default)
 # Cargo.lock
