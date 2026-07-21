@@ -61,41 +61,55 @@ If you use Claude Code through WSL, that is supported too. The monitor can read 
 
 ## Install
 
-Install this custom fork build from the `custom-latest` prerelease:
+GitHub Actions creates a plain portable `.exe` after every push to this fork's custom branch.
+
+Download the latest custom exe:
+
+```powershell
+irm https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe -OutFile .\claude-code-usage-monitor.exe
+```
+
+Run it directly:
+
+```powershell
+.\claude-code-usage-monitor.exe
+```
+
+For diagnostics:
+
+```powershell
+.\claude-code-usage-monitor.exe --diagnose
+```
+
+Optional one-command install with a Start Menu shortcut:
 
 ```powershell
 $installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/ridvankuntug/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo ridvankuntug/Claude-Code-Usage-Monitor
 ```
 
-This installs the custom executable to:
+That optional installer places the exe at:
 
 ```text
 %LOCALAPPDATA%\ClaudeCodeUsageMonitorCustom\claude-code-usage-monitor.exe
 ```
 
-It also creates a Start Menu shortcut named:
-
-```text
-Claude Code Usage Monitor Custom
-```
-
 Do not use `winget install CodeZeno.ClaudeCodeUsageMonitor` for this fork. WinGet installs the official CodeZeno release, not this custom Claude Desktop history fallback build.
-
-You can also download the custom exe directly from this fork's prerelease:
-
-```text
-https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe
-```
 
 ## Use
 
-After installing this custom build, run it from the Start Menu shortcut or directly:
+If you downloaded the plain exe, run:
+
+```powershell
+.\claude-code-usage-monitor.exe
+```
+
+If you used the optional installer, run it from the Start Menu shortcut:
 
 ```text
 Claude Code Usage Monitor Custom
 ```
 
-For diagnostics:
+Installed-build diagnostics:
 
 ```powershell
 & "$env:LOCALAPPDATA\ClaudeCodeUsageMonitorCustom\claude-code-usage-monitor.exe" --diagnose
@@ -263,9 +277,15 @@ To carry the Claude Desktop history fallback forward after upstream updates, fol
 
 ## Custom Branch Builds
 
-This fork can publish a custom portable build from the `claude-desktop-history-fallback` branch. After pushing that branch to your own GitHub repository, the **Custom Branch Build** workflow builds the app on Windows and replaces the `custom-latest` prerelease asset.
+This fork publishes a plain portable exe from the `claude-desktop-history-fallback` branch. After pushing that branch to GitHub, the **Custom Branch Build** workflow builds the app on Windows and replaces the `custom-latest` prerelease asset.
 
-Install that custom build with:
+Direct exe URL:
+
+```text
+https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe
+```
+
+Optional local install helper:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-custom.ps1 -Repo ridvankuntug/Claude-Code-Usage-Monitor

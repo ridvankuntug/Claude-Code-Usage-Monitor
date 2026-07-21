@@ -197,23 +197,35 @@ git push -u origin claude-desktop-history-fallback
 The custom release asset will be available at:
 
 ```text
-https://github.com/OWNER/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe
+https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe
 ```
 
-Replace `OWNER` with your GitHub username or organization.
+## Downloading The Plain Exe
 
-## Installing The Custom Build
+Download the latest GitHub-built custom exe:
+
+```powershell
+irm https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe -OutFile .\claude-code-usage-monitor.exe
+```
+
+Run it directly:
+
+```powershell
+.\claude-code-usage-monitor.exe --diagnose
+```
+
+## Optional Local Install Helper
 
 From a local clone:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-custom.ps1 -Repo OWNER/Claude-Code-Usage-Monitor
+powershell -ExecutionPolicy Bypass -File .\scripts\install-custom.ps1 -Repo ridvankuntug/Claude-Code-Usage-Monitor
 ```
 
 Directly from GitHub:
 
 ```powershell
-$installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/OWNER/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo OWNER/Claude-Code-Usage-Monitor
+$installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/ridvankuntug/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo ridvankuntug/Claude-Code-Usage-Monitor
 ```
 
 Confirm line endings and whitespace:
