@@ -61,20 +61,44 @@ If you use Claude Code through WSL, that is supported too. The monitor can read 
 
 ## Install
 
-Install the latest version from WinGet:
+Install this custom fork build from the `custom-latest` prerelease:
 
 ```powershell
-winget install CodeZeno.ClaudeCodeUsageMonitor
+$installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/ridvankuntug/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo ridvankuntug/Claude-Code-Usage-Monitor
 ```
 
-If you prefer not to use WinGet, you can still download the latest `claude-code-usage-monitor.exe` from the [Releases](https://github.com/CodeZeno/Claude-Code-Usage-Monitor/releases) page and run it directly.
+This installs the custom executable to:
+
+```text
+%LOCALAPPDATA%\ClaudeCodeUsageMonitorCustom\claude-code-usage-monitor.exe
+```
+
+It also creates a Start Menu shortcut named:
+
+```text
+Claude Code Usage Monitor Custom
+```
+
+Do not use `winget install CodeZeno.ClaudeCodeUsageMonitor` for this fork. WinGet installs the official CodeZeno release, not this custom Claude Desktop history fallback build.
+
+You can also download the custom exe directly from this fork's prerelease:
+
+```text
+https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe
+```
 
 ## Use
 
-After installing with WinGet, run:
+After installing this custom build, run it from the Start Menu shortcut or directly:
+
+```text
+Claude Code Usage Monitor Custom
+```
+
+For diagnostics:
 
 ```powershell
-claude-code-usage-monitor
+& "$env:LOCALAPPDATA\ClaudeCodeUsageMonitorCustom\claude-code-usage-monitor.exe" --diagnose
 ```
 
 Once running, it will appear in your taskbar and as one or more tray icons in the notification area.
@@ -244,13 +268,13 @@ This fork can publish a custom portable build from the `claude-desktop-history-f
 Install that custom build with:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-custom.ps1 -Repo OWNER/Claude-Code-Usage-Monitor
+powershell -ExecutionPolicy Bypass -File .\scripts\install-custom.ps1 -Repo ridvankuntug/Claude-Code-Usage-Monitor
 ```
 
-Or run it directly from GitHub after replacing `OWNER` with your GitHub username:
+Or run it directly from GitHub:
 
 ```powershell
-$installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/OWNER/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo OWNER/Claude-Code-Usage-Monitor
+$installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/ridvankuntug/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo ridvankuntug/Claude-Code-Usage-Monitor
 ```
 
 ## Open Source
