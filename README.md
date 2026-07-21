@@ -9,6 +9,24 @@ A lightweight Windows taskbar widget for people already using Claude Code, with 
 
 It sits in your taskbar and shows how much of your Claude Code, Codex, and/or Antigravity usage window you have left, without needing to open the terminal or the provider site.
 
+## Custom Fork Notes
+
+This repository is a custom fork of [`CodeZeno/Claude-Code-Usage-Monitor`](https://github.com/CodeZeno/Claude-Code-Usage-Monitor). It is not the official CodeZeno release.
+
+Differences from upstream:
+
+- Adds a Claude Desktop local usage history fallback when Claude Code OAuth usage polling cannot find usable credentials.
+- Reads only `plan-usage-history.json` from the documented Claude Desktop locations.
+- Maps the newest sample's `u.fh` value to the 5-hour usage percentage.
+- Maps the newest sample's `u.sd` value to the 7-day usage percentage.
+- Leaves reset timestamps empty for that fallback because Claude Desktop history does not include exact reset times.
+- Adds tests for newest-sample selection and percentage clamping.
+- Adds a local maintenance guide for carrying this change forward after upstream updates.
+- Adds a custom GitHub Actions build that publishes a `custom-latest` prerelease from the `claude-desktop-history-fallback` branch.
+- Adds a PowerShell installer for downloading that custom build from this fork.
+
+Maintenance and reapply notes are in [`docs/claude-desktop-history-fallback-maintenance.md`](docs/claude-desktop-history-fallback-maintenance.md).
+
 ## What You Get
 
 - A **5h** bar for your current 5-hour Claude usage window

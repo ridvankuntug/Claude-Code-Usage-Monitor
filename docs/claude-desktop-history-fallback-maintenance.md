@@ -41,21 +41,38 @@ git status --short
 
 ## Pulling A New Upstream Version
 
-If this repository still points at upstream, fetch the latest changes:
+This local clone uses:
+
+- `origin` for `ridvankuntug/Claude-Code-Usage-Monitor`
+- `upstream` for `CodeZeno/Claude-Code-Usage-Monitor`
+
+Fetch the latest upstream changes:
 
 ```powershell
-git fetch origin
+git fetch upstream
 ```
 
 Review what changed upstream before applying anything:
 
 ```powershell
-git log --oneline --decorate --max-count 20 origin/main
-git diff --stat HEAD..origin/main
-git diff HEAD..origin/main -- src\poller.rs
+git log --oneline --decorate --max-count 20 upstream/main
+git diff --stat main..upstream/main
+git diff main..upstream/main -- src\poller.rs
 ```
 
-Then update the working tree using your preferred local workflow. If you do not want to commit local changes, keep the patch file and reclone into a fresh folder.
+Update local `main`, then rebase the custom branch on top of it:
+
+```powershell
+git switch main
+git merge upstream/main
+git push origin main
+
+git switch claude-desktop-history-fallback
+git rebase main
+git push origin claude-desktop-history-fallback --force-with-lease
+```
+
+The branch push will trigger the custom GitHub Actions build and refresh the `custom-latest` prerelease.
 
 ## Reapplying The Fallback
 
