@@ -29,7 +29,7 @@ jobs:
           fetch-depth: 0
 
       # Keep in sync with rust-toolchain.toml.
-      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: dtolnay/rust-toolchain@1.120.0
 
       - name: Test updater safeguards
         run: cargo test --locked updater
