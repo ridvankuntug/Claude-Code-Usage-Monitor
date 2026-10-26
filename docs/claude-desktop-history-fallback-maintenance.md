@@ -7,8 +7,9 @@ This note is for carrying the local Claude Desktop usage history fallback forwar
 Keep this behavior available even after pulling new versions from `CodeZeno/Claude-Code-Usage-Monitor`:
 
 - Run upstream's Claude polling first, unchanged. Since v2.x upstream tries, in order, the CLI credentials (`~/.claude/.credentials.json`), the Claude desktop app's own DPAPI/OSCrypt-encrypted OAuth token cache, and WSL credentials, then refreshes the token and calls the usage endpoint (with its messages-header fallback).
-- Only if that whole chain returns an error, read Claude Desktop's local `plan-usage-history.json`.
-- If no usable history file is found, return the original upstream error unchanged, so the UI keeps showing upstream's states (sign in again, retrying, HTTP status, ...).
+- Only if that chain ends in a credential or login failure (`NoCredentials`, `TokenExpired`, `AuthRequired`, HTTP 401/403), read Claude Desktop's local `plan-usage-history.json`.
+- Transient failures (`NetworkError`, `RequestFailed`, `UnexpectedResponse`, other HTTP statuses such as 429/5xx) never use the fallback, so upstream keeps the last good reading as stale and retries sooner.
+- If no usable history file is found, return the original upstream error unchanged, so the UI keeps showing upstream's states (sign in again, no login found, ...).
 - The fallback reads only `plan-usage-history.json`. It does not touch tokens, cookies, Local Storage, or `Network\Cookies` itself; upstream's own desktop token reader is left as is.
 - History files are searched, first readable and parseable file wins, in this order:
   - `%LOCALAPPDATA%\Claude-Data\claude_<publisher>\plan-usage-history.json` (migrated desktop data; `claude_pzs8sxrjxfjjc` first)
@@ -23,10 +24,14 @@ Keep this behavior available even after pulling new versions from `CodeZeno/Clau
 
 ### Scope and limits
 
-- The fallback is wired into `claude::poll_claude_code()`, the single-account Claude poller. Configured multi-account profiles (`claude::poll_account()`) keep upstream behavior. Samples carry an `org` id, but upstream profiles do not know their organization id without an extra API call, so a profile-to-sample mapping is not attempted.
+- Upstream always polls Claude through the accounts layer (`AccountSettings::get(Claude)` is always `Some`). The default profile goes to `claude::poll_account(path)` when a readable `~/.claude/.credentials.json` exists, otherwise to `claude::poll_claude_code()`. Both are wrapped.
+- `poll_account` uses the fallback only for the default CLI credentials path, using upstream's `desktop_fallback_allowed()` rule for the desktop token. Custom account profiles stay pinned and keep upstream behavior.
+- Samples carry an `org` id, but upstream profiles do not know their organization id without an extra API call, so samples are not matched to profiles or organizations. If the CLI and the desktop app are signed in to different organizations, the newest sample may belong to the desktop app's organization.
 - Like upstream's desktop token lookup, a non-empty `CLAUDE_CONFIG_DIR` is treated as an explicit account selection: the fallback is skipped and the upstream error is returned.
 - Desktop history does not include reset times, so the countdown is empty while the fallback is in use.
-- The newest sample is used as is, however old it is.
+- The newest sample is used as is, however old it is, and is not marked stale.
+- While the fallback supplies usage, upstream's sign-in notification and auth pause for that failure do not happen, so upstream keeps trying its own credential refresh on each poll.
+- `plan-usage-history.json` is not part of the account's credential-watch signature. If a source was paused by an auth error before any history existed, a manual refresh or a credential change resumes it.
 
 ## Where The Code Lives
 
@@ -34,7 +39,7 @@ Keep this behavior available even after pulling new versions from `CodeZeno/Clau
 | --- | --- |
 | Fallback module (parser, path discovery, wrapper, tests) | `src/poller/claude_desktop/usage_history.rs` |
 | Module declaration | `src/poller/claude_desktop.rs`: `pub(super) mod usage_history;` |
-| Hook | `src/poller/claude.rs`: `poll_claude_code()` wraps upstream's body, now `poll_claude_code_with_credentials()` |
+| Hooks | `src/poller/claude.rs`: `poll_claude_code()` wraps upstream's body, now `poll_claude_code_with_credentials()`; `poll_account()` wraps `poll_account_with_credentials()` when `desktop_history_allowed(path)` |
 | Custom build | `.github/workflows/custom-build.yml` |
 | Installer | `scripts/install-custom.ps1` |
 | Fork notes and custom install | `README.md` ("Custom Fork Notes", "Installation") |
@@ -50,7 +55,7 @@ pub(super) fn poll_claude_code() -> Result<UsageData, PollError> {
 }
 ```
 
-`or_desktop_history` returns the upstream result on success, otherwise the fallback result, otherwise the original error.
+`poll_account()` does the same through `desktop_history_allowed()`. `or_desktop_history` returns the upstream result on success or transient failure, otherwise the fallback result, otherwise the original error.
 
 ## Remotes
 
@@ -80,7 +85,7 @@ git merge origin/main
 
 Typical conflict points and what to check:
 
-- `src/poller/claude.rs`: keep upstream's polling body inside `poll_claude_code_with_credentials()` and keep the wrapper in `poll_claude_code()`. If upstream renames or splits `poll_claude_code`, hook the wrapper into whatever function `PROVIDER_POLLERS` uses for `ProviderId::Claude`.
+- `src/poller/claude.rs`: keep upstream's polling bodies inside `poll_claude_code_with_credentials()` and `poll_account_with_credentials()`, and keep both wrappers. If upstream renames or splits them, hook the wrapper into whatever `PROVIDER_POLLERS` and `poller/accounts.rs` call for `ProviderId::Claude`. If upstream changes `desktop_fallback_allowed()`, keep `desktop_history_allowed()` on the same rule.
 - `src/poller/claude_desktop.rs`: keep the `pub(super) mod usage_history;` line. If upstream renames `data_directories_in()`, update the call in `usage_history.rs`.
 - `README.md`: take upstream's version, then reapply "Custom Fork Notes" and the custom "Installation" section.
 - `.github/workflows/custom-build.yml`: keep the Rust version in sync with `rust-toolchain.toml` and `.github/workflows/release.yml`, and keep the asset name `claude-code-usage-monitor.exe` in sync with `scripts/install-custom.ps1`.
@@ -109,7 +114,7 @@ Fallback-only tests:
 cargo test usage_history
 ```
 
-They cover newest-sample selection, clamping, samples without `t`, rejected or incomplete history, path discovery and de-duplication, and that the original error is kept when no history exists.
+They cover newest-sample selection, clamping, samples without `t`, rejected or incomplete history, path discovery and de-duplication, first-readable-file selection, that transient errors skip the fallback, and that the original error is kept when no history exists. `cargo test only_the_default_profile` covers the profile scoping.
 
 ### Machines without a full Windows SDK
 
@@ -123,7 +128,7 @@ Use a Visual Studio x64 developer environment (`vcvars64.bat`) for the MSVC link
 
 ## Automatic Custom Builds
 
-When `claude-desktop-history-fallback` is pushed to the fork, `.github/workflows/custom-build.yml` will:
+When `claude-desktop-history-fallback` is pushed to the fork, `.github/workflows/custom-build.yml` will (one run at a time; a newer push cancels an older run):
 
 1. Run `cargo test --locked`.
 2. Run `cargo build --release --locked`.

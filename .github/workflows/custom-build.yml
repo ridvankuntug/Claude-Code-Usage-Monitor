@@ -9,6 +9,11 @@ on:
 permissions:
   contents: write
 
+# Every run replaces the same custom-latest tag and release; never run two at once.
+concurrency:
+  group: custom-latest
+  cancel-in-progress: true
+
 env:
   RELEASE_TAG: custom-latest
   RELEASE_ASSET_NAME: claude-code-usage-monitor.exe

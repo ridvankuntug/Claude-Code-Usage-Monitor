@@ -10,7 +10,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ($Repo -notmatch "^[^/]+/[^/]+$") {
-    throw "Repo must be in owner/name format, for example RKuntug/Claude-Code-Usage-Monitor."
+    throw "Repo must be in owner/name format, for example ridvankuntug/Claude-Code-Usage-Monitor."
 }
 
 $exeName = "claude-code-usage-monitor.exe"

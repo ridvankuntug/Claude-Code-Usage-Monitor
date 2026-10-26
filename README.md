@@ -16,12 +16,13 @@ This repository is a custom fork of [`CodeZeno/Claude-Code-Usage-Monitor`](https
 
 Differences from upstream:
 
-- Adds a Claude Desktop local usage history fallback for Claude Code. It runs only after every upstream Claude path has failed (CLI credentials, the desktop app's token cache, token refresh, and the usage request); if it finds nothing, the original upstream error is shown unchanged.
+- Adds a Claude Desktop local usage history fallback for Claude Code. It runs only when upstream's Claude polling ends in a credential or login failure (no CLI or desktop app token, an expired or rejected login); if it finds nothing, the original upstream error is shown unchanged. Network, rate-limit, and server errors keep upstream's stale-reading and retry behavior.
 - Reads only `plan-usage-history.json` from the Claude Desktop data directories upstream already knows (`%LOCALAPPDATA%\Claude-Data\claude_*`, `%APPDATA%\Claude`, MSIX `Packages\Claude_*\LocalCache\Roaming\Claude`) plus `%LOCALAPPDATA%\Claude`.
 - Maps the newest sample's `u.fh` value to the 5-hour usage percentage and `u.sd` to the 7-day usage percentage, clamped to 0-100.
 - Leaves reset timestamps empty for that fallback because Claude Desktop history does not include exact reset times.
-- Applies the fallback to single-account Claude polling only, and not when `CLAUDE_CONFIG_DIR` is set; configured multi-account profiles keep upstream behavior.
-- Adds tests for newest-sample selection, percentage clamping, samples without timestamps, path discovery, and error preservation.
+- Applies the fallback only to the default Claude profile, the same scope upstream uses for the desktop app token, and not when `CLAUDE_CONFIG_DIR` is set; custom account profiles keep upstream behavior.
+- While the fallback supplies usage, the sign-in prompt and auth pause for that failure are not shown.
+- Adds tests for newest-sample selection, percentage clamping, samples without timestamps, path discovery, file selection, profile scoping, and error preservation.
 - Adds a local maintenance guide for carrying this change forward after upstream updates.
 - Adds a custom GitHub Actions build that publishes a `custom-latest` prerelease from the `claude-desktop-history-fallback` branch.
 - Adds a PowerShell installer for downloading that custom build from this fork.
