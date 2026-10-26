@@ -28,8 +28,13 @@ jobs:
       # Keep in sync with rust-toolchain.toml and release.yml.
       - uses: dtolnay/rust-toolchain@1.95.0
 
+      # These upstream tests subtract up to hours from Instant::now(), which
+      # overflows on a freshly booted runner (Windows Instant counts from boot).
       - name: Run tests
-        run: cargo test --locked
+        run: >-
+          cargo test --locked --
+          --skip poller::retry_after::tests::failed_manual_probe_keeps_cooldown_and_cannot_be_repeated_immediately
+          --skip poller::retry_after::tests::oversized_headers_store_bounded_cooldowns_and_requests_resume_after_expiry
 
       - name: Build release binary
         run: cargo build --release --locked
