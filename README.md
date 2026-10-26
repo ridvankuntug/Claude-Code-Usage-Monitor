@@ -1,304 +1,157 @@
-![Windows](https://img.shields.io/badge/platform-Windows-blue)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
 # Claude Code Usage Monitor
 
-![Screenshot](.github/animation.gif)
+![Windows](https://img.shields.io/badge/platform-Windows-blue)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A lightweight Windows taskbar widget for people already using Claude Code, with optional Codex and Google Antigravity usage display.
+A lightweight, open-source Windows taskbar widget for monitoring Claude Code usage limits and reset times. It can also display usage for Codex, Google Antigravity, OpenCode Go, Cursor, Grok Build, and GitHub Copilot.
 
-It sits in your taskbar and shows how much of your Claude Code, Codex, and/or Antigravity usage window you have left, without needing to open the terminal or the provider site.
+See the [user guide](USER_GUIDE.md) for theme customisation and everyday settings,
+or the [changelog](CHANGELOG.md) for version history and notable changes.
 
-## Custom Fork Notes
+![Claude Code Usage Monitor running in the Windows taskbar](.github/animation.gif)
 
-This repository is a custom fork of [`CodeZeno/Claude-Code-Usage-Monitor`](https://github.com/CodeZeno/Claude-Code-Usage-Monitor). It is not the official CodeZeno release.
+## Features
 
-Differences from upstream:
-
-- Adds a Claude Desktop local usage history fallback when Claude Code OAuth usage polling cannot find usable credentials.
-- Reads only `plan-usage-history.json` from the documented Claude Desktop locations.
-- Maps the newest sample's `u.fh` value to the 5-hour usage percentage.
-- Maps the newest sample's `u.sd` value to the 7-day usage percentage.
-- Leaves reset timestamps empty for that fallback because Claude Desktop history does not include exact reset times.
-- Adds tests for newest-sample selection and percentage clamping.
-- Adds a local maintenance guide for carrying this change forward after upstream updates.
-- Adds a custom GitHub Actions build that publishes a `custom-latest` prerelease from the `claude-desktop-history-fallback` branch.
-- Adds a PowerShell installer for downloading that custom build from this fork.
-
-Maintenance and reapply notes are in [`docs/claude-desktop-history-fallback-maintenance.md`](docs/claude-desktop-history-fallback-maintenance.md).
-
-## What You Get
-
-- A **5h** bar for your current 5-hour Claude usage window
-- A **7d** bar for your current 7-day window
-- Optional Codex usage bars alongside Claude Code
-- Optional Antigravity model usage bars for Google's 5-hour and weekly Gemini quota windows
-- A live countdown until each limit resets
-- A small native widget that lives directly in the Windows taskbar
-- System tray icon badges showing your enabled model usage percentage
-- Left-click the tray icon to toggle the taskbar widget on or off
-- Right-click options for refresh, displayed models, update frequency, language, startup, widget visibility, and updates
-- Multi-monitor taskbar placement, so the widget can live on the taskbar for the screen you prefer
-
-## Who This Is For
-
-This app is for Windows users who already have **Claude Code (CLI or App) installed and signed in**.
-
-Codex support is optional. To show Codex usage, install and sign in to the Codex CLI, then enable Codex from the right-click **Models** menu.
-
-Antigravity support is optional too. To show Antigravity usage, install and sign in to Google Antigravity, then enable the **Antigravity** model from the right-click **Models** menu.
-
-It works best if you want a simple "how close am I to the limit?" display that is always visible.
+- Displays current usage and time remaining until each limit resets
+- Counts usage up from zero or down from the full allowance, whichever you prefer
+- Supports Claude Code, Codex, Google Antigravity, OpenCode Go, Cursor, Grok Build, and GitHub Copilot
+- Supports multiple accounts for Claude Code and Codex
+- Lives in the Windows taskbar with quick controls in the system tray
+- Supports multiple monitors and Windows startup
+- Includes configurable refresh intervals, providers, languages, and updates
+- Provides built-in themes and a visual Theme Studio for custom layouts
+- Collects no analytics or telemetry
 
 ## Requirements
 
 - Windows 10 or Windows 11
-- Claude Code (CLI or App) installed and authenticated
-- Optional: Codex CLI installed and authenticated, if you want Codex usage
-- Optional: Google Antigravity installed and authenticated, if you want Antigravity usage
+- At least one supported provider installed and signed in
 
-If you use Claude Code through WSL, that is supported too. The monitor can read your Claude Code credentials from Windows or from your WSL environment.
+Claude Code credentials can be detected from the CLI, Claude desktop app, or WSL. Other providers are optional and can be enabled independently from the dashboard.
 
-## Install
+## Installation
 
-GitHub Actions creates a plain portable `.exe` after every push to this fork's custom branch.
-
-Download the latest custom exe:
+Install the latest release with WinGet:
 
 ```powershell
-irm https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe -OutFile .\claude-code-usage-monitor.exe
+winget install CodeZeno.ClaudeCodeUsageMonitor
 ```
 
-Run it directly:
+Alternatively, download `claude-code-usage-monitor.exe` from [GitHub Releases](https://github.com/CodeZeno/Claude-Code-Usage-Monitor/releases).
+
+See [updater verification](docs/updater.md) for the portable updater's integrity checks and trust boundary.
+
+## Usage
+
+Start the monitor:
 
 ```powershell
-.\claude-code-usage-monitor.exe
+claude-code-usage-monitor
 ```
 
-For diagnostics:
+Open the settings dashboard directly:
 
 ```powershell
-.\claude-code-usage-monitor.exe --diagnose
+claude-code-usage-monitor --dashboard
 ```
 
-Optional one-command install with a Start Menu shortcut:
+Use the dashboard to select providers, change the refresh interval, choose a display, enable startup, or customize the widget. **Settings > Display > Usage direction** switches the default theme and other themes that support this setting between showing what has been used and what is left, with Used as the default. Selecting Remaining makes a fresh limit read 100% and drain as you work.
 
-```powershell
-$installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/ridvankuntug/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo ridvankuntug/Claude-Code-Usage-Monitor
+Theme authors can opt in with `.display` bindings, including `{claude.session.display:usage_line}` and `{claude.session.display:usage_badge}`. Existing `.percentage`, `.remaining`, and unsuffixed usage summaries keep their meaning; warning thresholds should continue to use `.percentage`.
+
+In the default theme, left-click a provider tray icon to show or hide the widget and right-click it to open the menu.
+
+## Provider setup
+
+| Provider | Setup |
+| --- | --- |
+| Claude Code | Sign in with the Claude Code CLI or desktop app. Windows and WSL credentials are detected automatically. |
+| Codex | Install and sign in to the Codex CLI, then enable Codex in **Providers**. |
+| Google Antigravity | Sign in to Antigravity, then enable it in **Providers**. |
+| OpenCode Go | Connect an OpenCode Go account, configure the credentials described below, then enable OpenCode in **Providers**. |
+| Cursor | Sign in to Cursor, then enable it in **Providers**. The local session is detected automatically. |
+| Grok Build | Run `grok login` in the Grok Build CLI, then enable Grok in **Providers**. The signed-in session is detected automatically. |
+| GitHub Copilot | Sign in with the Copilot CLI (`copilot`, then `/login`) or the GitHub CLI (`gh auth login`), then enable Copilot in **Providers**. The stored login is detected automatically. |
+
+For OpenCode Go, set `OPENCODE_GO_WORKSPACE_ID` and `OPENCODE_GO_AUTH_COOKIE`, or create `%APPDATA%\opencode-go\config.json`:
+
+```json
+{
+  "workspaceId": "wrk_01...",
+  "authCookie": "__Host-console_session=your-session-cookie-value"
+}
 ```
 
-That optional installer places the exe at:
+The workspace ID is part of the OpenCode Go console URL: `https://opencode.ai/console/<workspaceId>/go`. Copy the `__Host-console_session` cookie from an authenticated `opencode.ai` browser session, including its name as shown above. A full Cookie header containing `__Host-console_session` or the legacy `auth` cookie is also accepted unchanged; no empty `auth=;` prefix is needed. Bare legacy `auth` cookie values remain supported. These formats work for both `authCookie` and `OPENCODE_GO_AUTH_COOKIE`. Set `OPENCODE_GO_CONFIG_FILE` to use a different config path. The monitor reads usage from the console JSON API using this workspace ID and cookie.
 
-```text
-%LOCALAPPDATA%\ClaudeCodeUsageMonitorCustom\claude-code-usage-monitor.exe
-```
+For Cursor, `CURSOR_SESSION_TOKEN` can override the automatically detected local session.
 
-Do not use `winget install CodeZeno.ClaudeCodeUsageMonitor` for this fork. WinGet installs the official CodeZeno release, not this custom Claude Desktop history fallback build.
+Grok Build usage comes from the session the CLI stores in `%USERPROFILE%\.grok\auth.json`, read through the same billing endpoint as the CLI's own `/usage` panel. Set `GROK_HOME` if the CLI keeps its home directory elsewhere. Only xAI sign-in entries are used; corporate identity-provider tokens and stored API keys are excluded. A bare `XAI_API_KEY` is not enough: the shared weekly allowance is only readable with a signed-in session. Grok reports one pool per billing period rather than a five-hour window, so the monitor shows it on the long-window row alongside the other providers, leaving the short-window row empty. On-demand spending replaces the pool on that row once any is used, as it already does for Claude Code and Codex.
 
-## Use
+GitHub Copilot usage comes from `api.github.com/copilot_internal/user`, the endpoint Copilot's own editors and CLI read. The monitor uses the first GitHub login that endpoint accepts, in this order: the `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN` environment variable, the Copilot CLI login, then the GitHub CLI login, both read from Windows Credential Manager. Copilot spends one premium-request pool per calendar month, so the monitor shows it on the long-window row and leaves the short-window row empty. Metered chat and completion allowances, as on Copilot Free, are available to themes through `copilot.limits.chat` and `copilot.limits.completions`.
 
-If you downloaded the plain exe, run:
+## Data and privacy
 
-```powershell
-.\claude-code-usage-monitor.exe
-```
+The monitor reads local sign-in credentials for enabled providers and sends usage requests directly to their official services. It has no backend service, collects no telemetry, and does not upload credentials or project files.
 
-If you used the optional installer, run it from the Start Menu shortcut:
+Credentials are read without modifying the provider files that contain them. When Grok Build rejects a stored token, the monitor asks the Grok CLI to refresh its own session rather than rewriting `auth.json` itself. OpenCode Go credentials saved in a JSON configuration file are plain text and should be protected like a browser session cookie.
 
-```text
-Claude Code Usage Monitor Custom
-```
+## Troubleshooting
 
-Installed-build diagnostics:
+Hover over the tray icon for the latest failure reason, or check the account
+status under **Settings > Providers > Accounts**. Missing credentials, expired
+or rejected logins, network failures, HTTP errors, and unexpected usage responses
+have distinct messages. Sign in again using the Claude desktop app or the CLI
+that owns the affected account, then refresh the monitor.
 
-```powershell
-& "$env:LOCALAPPDATA\ClaudeCodeUsageMonitorCustom\claude-code-usage-monitor.exe" --diagnose
-```
+Open **Diagnostics** in the dashboard and enable recording to inspect or copy
+polling errors. Logging is optional; enable it before reproducing the problem.
 
-Once running, it will appear in your taskbar and as one or more tray icons in the notification area.
-
-- Drag the left divider to move the taskbar widget
-- On multi-monitor setups, drag the widget onto another Windows taskbar to move it to that screen
-- Right-click the taskbar widget or tray icon for refresh, displayed models, update frequency, Start with Windows, reset position, language, updates, and exit
-- Left-click the tray icon to toggle the taskbar widget on or off
-- Enable `Start with Windows` from the right-click menu if you want it to launch automatically when you sign in
-
-### Models
-
-Use the right-click **Models** menu to choose what the widget displays:
-
-- **Claude Code** is enabled by default
-- **Codex** can be enabled alongside Claude Code or shown by itself
-- **Antigravity** can be enabled alongside the other providers or shown by itself as its own model column
-
-When multiple models are shown, each model has its own usage bar and matching usage text color. Antigravity prefers Google's Gemini quota summary when available and falls back to model quota data when needed.
-
-### System Tray Icon
-
-The tray icon shows your current 5-hour usage as a percentage badge.
-
-If multiple providers are enabled, the app shows one tray icon per provider. If only one model is enabled, it shows one tray icon.
-
-The Claude Code tray icon uses the same warm usage colors as the Claude bar. The Codex tray icon uses a black and white badge style. The Antigravity tray icon uses a blue badge style.
-
-Hovering over a tray icon shows the usage values for that model.
-
-## Diagnostics
-
-If you need to troubleshoot startup or visibility issues, run:
+Run diagnostics with:
 
 ```powershell
 claude-code-usage-monitor --diagnose
 ```
 
-This writes a log file to:
+The diagnostic log is written to `%TEMP%\claude-code-usage-monitor.log`. Application settings are stored in `%APPDATA%\ClaudeCodeUsageMonitor\settings.json`.
 
-```text
-%TEMP%\claude-code-usage-monitor.log
-```
+If the app unexpectedly closes because of a Rust panic, it automatically appends
+the panic message, source location, and thread details to the same log, even when
+diagnostic recording is off. Copy the log before starting a new `--diagnose`
+session, which clears it. Review and redact credentials, account identifiers,
+and personal information before sharing relevant excerpts in a crash report.
+Report suspected vulnerabilities privately using [SECURITY.md](SECURITY.md).
 
-Settings are saved to:
+## Build from source
 
-```text
-%APPDATA%\ClaudeCodeUsageMonitor\settings.json
-```
-
-## Account Support
-
-This app works with the same account types that Claude Code itself supports.
-
-As of **March 19, 2026**, Anthropic's Claude Code setup documentation says:
-
-- **Supported:** Pro, Max, Teams, Enterprise, and Console accounts
-- **Not supported:** the free Claude.ai plan
-
-If Anthropic changes Claude Code availability in the future, this app should follow whatever Claude Code supports, as long as the usage data remains exposed through the same authenticated endpoints.
-
-## Privacy And Security
-
-This project is **open source**, so you can inspect exactly what it does.
-
-What the app reads:
-
-- Your local Claude Code OAuth credentials from `~/.claude/.credentials.json`
-- If needed, the same credentials file inside an installed WSL distro
-- If Claude Code credentials are unavailable, Claude Desktop usage history from `plan-usage-history.json`
-- If Codex is enabled, your local Codex credentials from `$CODEX_HOME/auth.json` or `~/.codex/auth.json`
-- If Antigravity is enabled, your local Antigravity OAuth token from Windows Credential Manager target `gemini:antigravity`
-
-What the app sends over the network:
-
-- Requests to Anthropic's Claude endpoints to read your usage and rate-limit information
-- Requests to ChatGPT's Codex usage endpoint to read your Codex usage and rate-limit information, if Codex is enabled
-- Requests to Google's Cloud Code / Antigravity endpoints to read your Antigravity quota information, if Antigravity is enabled
-- Requests to GitHub only if you use the app's update check / self-update feature
-- If proxy environment variables such as `HTTPS_PROXY`, `HTTP_PROXY`, or `ALL_PROXY` are set, those outbound requests may use that proxy
-
-What the app stores locally:
-
-- Widget position
-- Selected taskbar / screen
-- Widget visibility
-- Polling frequency
-- Language preference
-- Last update check time
-- Displayed model preferences
-
-What it does **not** do:
-
-- It does not send your credentials to any other server
-- It does not use a separate backend service
-- It does not collect analytics or telemetry
-- It does not upload your project files
-- It does not directly edit your Codex credentials file
-- It does not read Claude Desktop tokens, cookies, Local Storage, or `Network\Cookies`
-
-Notes:
-
-- If your Claude Code token is expired, the app may ask the local Claude CLI to refresh it in the background
-- If your Codex token is expired, the app may ask the local Codex CLI to refresh it in the background. The monitor does not write `auth.json` itself; any credential update is handled by the Codex CLI.
-- If your Antigravity token is expired, open Antigravity and sign in again. The monitor does not write Windows Credential Manager entries itself.
-- Portable installs can update themselves by downloading the latest release from this repository
-- Proxies should be trusted because proxied usage requests include your OAuth bearer token inside the TLS connection
-
-## How It Works
-
-The monitor:
-
-1. Finds your enabled model login credentials
-2. Reads your current usage from Anthropic, ChatGPT, and/or Google's Antigravity endpoints
-3. Shows the result directly in the Windows taskbar
-4. Keeps the widget aligned with the selected taskbar and tray area
-5. Refreshes periodically in the background
-
-If the newer usage endpoint is unavailable, it can fall back to reading the rate-limit headers returned by Claude's Messages API.
-
-If Claude Code OAuth credentials are unavailable, it can also fall back to Claude Desktop's local usage history file:
-
-```text
-%APPDATA%\Claude\plan-usage-history.json
-%LOCALAPPDATA%\Claude\plan-usage-history.json
-%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\plan-usage-history.json
-```
-
-The fallback reads the newest sample by `t`, maps `u.fh` to the 5-hour usage percentage, maps `u.sd` to the 7-day usage percentage, clamps both values to `0..100`, and leaves reset times empty because that file does not include exact reset timestamps.
-
-## Build From Source On Windows
-
-Install the required build tools:
+Install [Rust via rustup](https://www.rust-lang.org/tools/install), then run:
 
 ```powershell
-winget install --source winget --id Rustlang.Rustup -e --accept-package-agreements --accept-source-agreements --silent
-winget install --source winget --id Microsoft.VisualStudio.2022.BuildTools -e --accept-package-agreements --accept-source-agreements --silent --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+cargo build --release
 ```
 
-Open an x64 MSVC build environment, then run the normal Rust commands:
+The repository pins Rust 1.95.0 in `rust-toolchain.toml`; rustup automatically
+selects this version. CI uses the same version. When upgrading Rust, update
+`rust-toolchain.toml`, `.github/workflows/release.yml`, and the `rust-version`
+in `Cargo.toml` together.
 
-```powershell
-cmd.exe /d /s /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && "%USERPROFILE%\.cargo\bin\cargo.exe" test'
-cmd.exe /d /s /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && "%USERPROFILE%\.cargo\bin\cargo.exe" build --release'
-```
+The executable will be created at `target\release\claude-code-usage-monitor.exe`.
 
-If Cargo cannot download crates because Windows cannot check certificate revocation, set Cargo's revocation check flag for that command:
+Windows MSVC builds statically link the C runtime through `.cargo/config.toml`,
+including release builds in CI. The executable does not require a separate
+Microsoft Visual C++ Redistributable installation; it still uses built-in Windows
+system libraries.
 
-```powershell
-cmd.exe /d /s /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && set CARGO_HTTP_CHECK_REVOKE=false&& "%USERPROFILE%\.cargo\bin\cargo.exe" test'
-cmd.exe /d /s /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && set CARGO_HTTP_CHECK_REVOKE=false&& "%USERPROFILE%\.cargo\bin\cargo.exe" build --release'
-```
+See [dependency security](docs/dependency-security.md) for automated dependency
+updates, CI security checks, and the commands to run those checks locally.
 
-Copy the portable executable after a successful release build:
+## Contributing and community
 
-```powershell
-New-Item -ItemType Directory -Force -Path .\outputs | Out-Null
-Copy-Item -Force .\target\release\claude-code-usage-monitor.exe .\outputs\claude-code-usage-monitor.exe
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, reporting bugs,
+and submitting pull requests, and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+For suspected vulnerabilities or credential exposure, use the private reporting
+instructions in our [security policy](SECURITY.md).
 
-To carry the Claude Desktop history fallback forward after upstream updates, follow the local maintenance guide in [`docs/claude-desktop-history-fallback-maintenance.md`](docs/claude-desktop-history-fallback-maintenance.md).
+## License
 
-## Custom Branch Builds
-
-This fork publishes a plain portable exe from the `claude-desktop-history-fallback` branch. After pushing that branch to GitHub, the **Custom Branch Build** workflow builds the app on Windows and replaces the `custom-latest` prerelease asset.
-
-Direct exe URL:
-
-```text
-https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe
-```
-
-Optional local install helper:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-custom.ps1 -Repo ridvankuntug/Claude-Code-Usage-Monitor
-```
-
-Or run it directly from GitHub:
-
-```powershell
-$installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/ridvankuntug/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo ridvankuntug/Claude-Code-Usage-Monitor
-```
-
-## Open Source
-
-This project is licensed under MIT.
-
-If you want to inspect the behavior or audit the code, everything is in this repository.
+Licensed under the [MIT License](LICENSE).
