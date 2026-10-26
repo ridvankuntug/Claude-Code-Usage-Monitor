@@ -16,7 +16,7 @@ This repository is a custom fork of [`CodeZeno/Claude-Code-Usage-Monitor`](https
 
 Differences from upstream:
 
-- Adds a Claude Desktop local usage history fallback for Claude Code. It runs only when upstream's Claude polling ends in a credential or login failure (no CLI or desktop app token, an expired or rejected login); if it finds nothing, the original upstream error is shown unchanged. Network, rate-limit, and server errors keep upstream's stale-reading and retry behavior.
+- Adds a Claude Desktop local usage history fallback for Claude Code. It runs only when upstream's Claude polling ends in a credential or login failure (no CLI or desktop app token, an expired or rejected login); if it finds nothing, the original upstream error is shown unchanged. Other failures (network, rate limits, server and other HTTP errors, unexpected responses) keep upstream's stale-reading and retry behavior.
 - Reads only `plan-usage-history.json` from the Claude Desktop data directories upstream already knows (`%LOCALAPPDATA%\Claude-Data\claude_*`, `%APPDATA%\Claude`, MSIX `Packages\Claude_*\LocalCache\Roaming\Claude`) plus `%LOCALAPPDATA%\Claude`.
 - Maps the newest sample's `u.fh` value to the 5-hour usage percentage and `u.sd` to the 7-day usage percentage, clamped to 0-100.
 - Leaves reset timestamps empty for that fallback because Claude Desktop history does not include exact reset times.
