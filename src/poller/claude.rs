@@ -81,6 +81,15 @@ enum CredentialSource {
 }
 
 pub(super) fn poll_claude_code() -> Result<UsageData, PollError> {
+    // Fork-only: Claude Desktop's usage history is the last resort after every
+    // upstream credential path fails; its absence keeps the original error.
+    claude_desktop::usage_history::or_desktop_history(
+        poll_claude_code_with_credentials(),
+        claude_desktop::usage_history::read_usage,
+    )
+}
+
+fn poll_claude_code_with_credentials() -> Result<UsageData, PollError> {
     let creds = match read_first_credentials() {
         Some(c) => c,
         None => {

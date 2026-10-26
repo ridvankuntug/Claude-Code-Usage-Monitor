@@ -16,6 +16,9 @@ use std::path::{Path, PathBuf};
 
 use crate::diagnose;
 
+// Fork-only: last-resort usage from the desktop app's local history file.
+pub(super) mod usage_history;
+
 /// Newest layout first. The desktop app migrated its cache to
 /// `oauth:tokenCacheV2` and leaves the older `oauth:tokenCache` key in place,
 /// so both are tried and the first that yields a usable token wins.
