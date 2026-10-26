@@ -10,9 +10,10 @@ permissions:
   contents: write
 
 # Every run replaces the same custom-latest tag and release; never run two at once.
+# Runs queue instead of cancelling each other so a release is never left half-created.
 concurrency:
   group: custom-latest
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   RELEASE_TAG: custom-latest
@@ -59,3 +60,62 @@ jobs:
             --title "Custom latest build" `
             --notes "Automated build from $env:GITHUB_REF_NAME at commit $env:GITHUB_SHA." `
             --prerelease
+
+      # The in-app updater follows this fork's releases/latest and accepts only a
+      # stable vX.Y.Z tag that is newer than the running version, so publish one
+      # release per Cargo.toml version. An existing release or tag is never moved
+      # or overwritten; fork-only changes reach the updater after a version bump.
+      - name: Publish stable release for the in-app updater
+        if: github.ref == 'refs/heads/claude-desktop-history-fallback'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $metadata = cargo metadata --no-deps --format-version 1 --locked
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "cargo metadata failed with exit code $LASTEXITCODE."
+            exit 1
+          }
+          $version = ($metadata | ConvertFrom-Json).packages |
+            Where-Object name -eq 'claude-code-usage-monitor' |
+            Select-Object -ExpandProperty version
+          if (-not $version) {
+            Write-Error "Could not read the package version from cargo metadata."
+            exit 1
+          }
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            Write-Warning "Version '$version' is not a plain X.Y.Z release, so no stable release is published."
+            exit 0
+          }
+          $tag = "v$version"
+
+          $isDraft = gh release view $tag --json isDraft --jq .isDraft 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            if ($isDraft -eq 'true') {
+              Write-Error "Draft release $tag already exists. Publish or delete it manually."
+              exit 1
+            }
+            Write-Host "Release $tag already exists; leaving it unchanged. Bump the version in Cargo.toml to publish new changes to the updater."
+            exit 0
+          }
+
+          # --exit-code: 0 = tag exists, 2 = no such tag, anything else = git error.
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" | Out-Null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Error "Tag $tag already exists without a release; it is never moved automatically. Delete the tag or bump the version."
+            exit 1
+          }
+          if ($LASTEXITCODE -ne 2) {
+            Write-Error "git ls-remote failed with exit code $LASTEXITCODE; cannot tell whether tag $tag exists."
+            exit 1
+          }
+
+          # gh creates the tag at the built commit and publishes the release only
+          # after the asset upload finishes. GitHub computes the asset's SHA-256
+          # digest, which the updater requires.
+          gh release create $tag `
+            dist/${{ env.RELEASE_ASSET_NAME }} `
+            --target $env:GITHUB_SHA `
+            --title "$tag (custom build)" `
+            --notes "Automated stable build from $env:GITHUB_REF_NAME at commit $env:GITHUB_SHA. Includes the Claude Desktop history fallback." `
+            --latest

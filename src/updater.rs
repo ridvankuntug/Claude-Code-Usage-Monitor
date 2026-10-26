@@ -117,9 +117,26 @@ fn parse_apply_update_args(
 
 pub fn current_install_channel() -> InstallChannel {
     match std::env::current_exe() {
-        Ok(path) if is_winget_install_path(&path) => InstallChannel::Winget,
+        Ok(path)
+            if winget_channel_supported(env!("CARGO_PKG_REPOSITORY"))
+                && is_winget_install_path(&path) =>
+        {
+            InstallChannel::Winget
+        }
         _ => InstallChannel::Portable,
     }
+}
+
+// Fork: the WinGet package is built from this upstream repository. A build that
+// follows another repository's releases would be "upgraded" to the upstream
+// package by WinGet, so such builds always update through their own GitHub
+// releases instead.
+const WINGET_PACKAGE_REPOSITORY: &str = "https://github.com/CodeZeno/Claude-Code-Usage-Monitor";
+
+fn winget_channel_supported(repository: &str) -> bool {
+    repository
+        .trim_end_matches('/')
+        .eq_ignore_ascii_case(WINGET_PACKAGE_REPOSITORY)
 }
 
 pub fn check_for_updates(channel: InstallChannel) -> Result<UpdateCheckResult, String> {

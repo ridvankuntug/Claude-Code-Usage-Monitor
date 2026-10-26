@@ -127,6 +127,33 @@ fn is_winget_install_path_accepts_configured_roots_and_descendants() {
 }
 
 #[test]
+fn winget_channel_is_supported_only_for_the_upstream_package_repository() {
+    for repository in [
+        "https://github.com/CodeZeno/Claude-Code-Usage-Monitor",
+        "https://github.com/CodeZeno/Claude-Code-Usage-Monitor/",
+        "https://github.com/codezeno/claude-code-usage-monitor",
+    ] {
+        assert!(winget_channel_supported(repository), "{repository}");
+    }
+    for repository in [
+        "https://github.com/ridvankuntug/Claude-Code-Usage-Monitor",
+        "https://github.com/CodeZeno/Claude-Code-Usage-Monitor-fork",
+        "",
+    ] {
+        assert!(!winget_channel_supported(repository), "{repository}");
+    }
+}
+
+#[test]
+fn fork_build_follows_fork_releases_and_never_uses_the_winget_channel() {
+    assert_eq!(
+        github_repo().unwrap(),
+        ("ridvankuntug", "Claude-Code-Usage-Monitor")
+    );
+    assert!(!winget_channel_supported(env!("CARGO_PKG_REPOSITORY")));
+}
+
+#[test]
 fn is_winget_install_path_rejects_siblings_with_the_same_prefix() {
     for root in winget_install_roots() {
         for suffix in ["-old", "Backup", ".old"] {

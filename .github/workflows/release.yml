@@ -20,6 +20,8 @@ jobs:
 
   build:
     needs: dependency-security
+    # Fork: never publish GitHub/WinGet releases from forks (winget needs build).
+    if: github.repository == 'CodeZeno/Claude-Code-Usage-Monitor'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7

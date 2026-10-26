@@ -24,10 +24,11 @@ Differences from upstream:
 - While the fallback supplies usage, the sign-in prompt and auth pause for that failure are not shown.
 - Adds tests for newest-sample selection, percentage clamping, samples without timestamps, path discovery, file selection, profile scoping, and error preservation.
 - Adds a local maintenance guide for carrying this change forward after upstream updates.
-- Adds a custom GitHub Actions build that publishes a `custom-latest` prerelease from the `claude-desktop-history-fallback` branch.
+- Adds a custom GitHub Actions build that publishes a `custom-latest` prerelease from the `claude-desktop-history-fallback` branch, plus a stable `v<version>` release for each new `Cargo.toml` version.
 - Adds a PowerShell installer for downloading that custom build from this fork.
+- Points the in-app updater at this fork's releases (`repository` in `Cargo.toml`) and turns off the WinGet update channel, because the WinGet package is the official CodeZeno release.
 
-The in-app updater still checks the official CodeZeno releases. Installing an update from it replaces this custom build with the official release, which does not include the fallback.
+The in-app updater checks this fork's latest stable GitHub release, so accepting an update keeps the fallback. It offers an update only when the fork publishes a higher version: fork-only changes made without a version bump are available from `custom-latest` but not through the updater. Builds made before this change still check the official CodeZeno releases; replace them once manually.
 
 Maintenance and reapply notes are in [`docs/claude-desktop-history-fallback-maintenance.md`](docs/claude-desktop-history-fallback-maintenance.md).
 

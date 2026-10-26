@@ -85,11 +85,14 @@ fn rejects_oversized_and_empty_assets() {
 
 #[test]
 fn rejects_unexpected_download_locations() {
+    let (owner, repo) = github_repo().unwrap();
     for url in [
-        "http://github.com/CodeZeno/Claude-Code-Usage-Monitor/releases/download/v2.14.0/claude-code-usage-monitor.exe",
-        "https://example.com/claude-code-usage-monitor.exe",
-        "https://github.com/other/repo/releases/download/v2.14.0/claude-code-usage-monitor.exe",
-        "https://github.com/CodeZeno/Claude-Code-Usage-Monitor/releases/download/v2.13.44/claude-code-usage-monitor.exe",
+        format!("http://github.com/{owner}/{repo}/releases/download/v2.14.0/claude-code-usage-monitor.exe"),
+        "https://example.com/claude-code-usage-monitor.exe".to_string(),
+        "https://github.com/other/repo/releases/download/v2.14.0/claude-code-usage-monitor.exe".to_string(),
+        format!("https://github.com/{owner}/{repo}/releases/download/v2.13.44/claude-code-usage-monitor.exe"),
+        // Fork: an asset from the upstream repository must not be installed.
+        "https://github.com/CodeZeno/Claude-Code-Usage-Monitor/releases/download/v2.14.0/claude-code-usage-monitor.exe".to_string(),
     ] {
         let mut value = fixture("v2.14.0");
         value["assets"][0]["browser_download_url"] = json!(url);
