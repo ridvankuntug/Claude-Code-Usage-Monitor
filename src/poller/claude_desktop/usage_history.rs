@@ -1,9 +1,9 @@
 //! Fork-only last-resort fallback: Claude Desktop's local usage history.
 //!
 //! The desktop app records plan usage samples in `plan-usage-history.json`
-//! inside its data directory. When every upstream Claude credential path
-//! fails (CLI credentials, desktop token cache, refresh, usage endpoint), the
-//! newest sample there still shows the current 5-hour and weekly usage.
+//! inside its data directory. When upstream Claude polling ends in a
+//! credential or login failure (no CLI or desktop token, expired or rejected
+//! login), the newest sample there still shows the 5-hour and weekly usage.
 //! Samples carry no reset times, so both windows are reported without one.
 //!
 //! See `docs/claude-desktop-history-fallback-maintenance.md`.
@@ -40,17 +40,26 @@ struct PlanUsageValues {
     sd: Option<f64>,
 }
 
-/// Keep `result` when upstream polling succeeded; otherwise try `fallback`
-/// and, if it has nothing, return the original upstream error unchanged so
-/// the UI keeps upstream's error semantics (sign-in prompts, retries).
+/// Keep `result` when upstream polling succeeded. After a credential or
+/// login failure (no credentials, expired or rejected login) try `fallback`;
+/// if it has nothing, return the original upstream error unchanged so the UI
+/// keeps upstream's sign-in prompts.
+///
+/// Transient failures (network, HTTP 429/5xx, unexpected responses) never use
+/// the fallback: upstream keeps the last good reading, marks it stale, and
+/// retries sooner, which is better than replacing it with a history sample
+/// that has no reset times and may be old.
 pub(in crate::poller) fn or_desktop_history(
     result: Result<UsageData, PollError>,
     fallback: impl FnOnce() -> Option<UsageData>,
 ) -> Result<UsageData, PollError> {
     result.or_else(|error| {
-        diagnose::log(format!(
-            "Claude usage poll failed: {error:?}; trying Claude Desktop usage history"
-        ));
+        if error.is_transient() {
+            return Err(error);
+        }
+        diagnose::log_lazy(|| {
+            format!("Claude usage poll failed: {error:?}; trying Claude Desktop usage history")
+        });
         fallback().ok_or(error)
     })
 }
@@ -64,40 +73,44 @@ pub(in crate::poller) fn read_usage() -> Option<UsageData> {
         diagnose::log("CLAUDE_CONFIG_DIR is set; skipping Claude Desktop usage history");
         return None;
     }
-    let paths = history_paths_in(
+    read_usage_from(history_paths_in(
         crate::known_folders::roaming_app_data_dir().as_deref(),
         crate::known_folders::local_app_data_dir().as_deref(),
-    );
+    ))
+}
+
+/// The first candidate that can be read and parsed wins; missing, unreadable,
+/// and unparsable files are skipped.
+fn read_usage_from(paths: impl IntoIterator<Item = PathBuf>) -> Option<UsageData> {
     for path in paths {
         let content = match std::fs::read_to_string(&path) {
             Ok(content) => content,
             Err(error) if error.kind() == ErrorKind::NotFound => continue,
             Err(error) => {
-                if diagnose::is_enabled() {
-                    diagnose::log_error(
-                        &format!(
-                            "unable to read Claude Desktop usage history at {}",
-                            path.display()
-                        ),
-                        error,
-                    );
-                }
+                diagnose::log_error(
+                    &format!(
+                        "unable to read Claude Desktop usage history at {}",
+                        path.display()
+                    ),
+                    error,
+                );
                 continue;
             }
         };
 
         match usage_from_history(&content) {
             Some(data) => {
-                diagnose::log(format!(
-                    "using Claude Desktop usage history at {}",
-                    path.display()
-                ));
+                diagnose::log_lazy(|| {
+                    format!("using Claude Desktop usage history at {}", path.display())
+                });
                 return Some(data);
             }
-            None => diagnose::log(format!(
-                "unable to parse Claude Desktop usage history at {}",
-                path.display()
-            )),
+            None => diagnose::log_lazy(|| {
+                format!(
+                    "unable to parse Claude Desktop usage history at {}",
+                    path.display()
+                )
+            }),
         }
     }
 
@@ -249,10 +262,56 @@ mod tests {
             PollError::AuthRequired,
             PollError::TokenExpired,
             PollError::NoCredentials,
-            PollError::NetworkError,
-            PollError::HttpStatus(429),
+            PollError::HttpStatus(401),
+            PollError::HttpStatus(403),
         ] {
             assert_eq!(or_desktop_history(Err(error), || None), Err(error));
+            assert!(or_desktop_history(Err(error), usage).is_ok(), "{error:?}");
         }
+    }
+
+    #[test]
+    fn transient_failures_keep_upstream_retry_and_stale_handling() {
+        for error in [
+            PollError::RequestFailed,
+            PollError::NetworkError,
+            PollError::UnexpectedResponse,
+            PollError::HttpStatus(429),
+            PollError::HttpStatus(503),
+        ] {
+            let result = or_desktop_history(Err(error), || {
+                panic!("transient {error:?} must not use the desktop history")
+            });
+            assert_eq!(result, Err(error));
+        }
+    }
+
+    #[test]
+    fn first_readable_and_parsable_history_wins() {
+        let temporary = tempfile::tempdir().unwrap();
+        let missing = temporary.path().join("missing.json");
+        let unreadable = temporary.path().join("directory.json");
+        let broken = temporary.path().join("broken.json");
+        let good = temporary.path().join("good.json");
+        let later = temporary.path().join("later.json");
+        std::fs::create_dir_all(&unreadable).unwrap();
+        std::fs::write(&broken, "{").unwrap();
+        std::fs::write(
+            &good,
+            r#"{"samples": [{"t": 1, "u": {"fh": 11, "sd": 22}}]}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            &later,
+            r#"{"samples": [{"t": 9, "u": {"fh": 99, "sd": 99}}]}"#,
+        )
+        .unwrap();
+
+        let data = read_usage_from([missing.clone(), unreadable, broken, good, later])
+            .expect("the first parsable file should be used");
+        assert_eq!(data.session.percentage, 11.0);
+        assert_eq!(data.weekly.percentage, 22.0);
+
+        assert!(read_usage_from([missing]).is_none());
     }
 }

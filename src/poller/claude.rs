@@ -81,8 +81,8 @@ enum CredentialSource {
 }
 
 pub(super) fn poll_claude_code() -> Result<UsageData, PollError> {
-    // Fork-only: Claude Desktop's usage history is the last resort after every
-    // upstream credential path fails; its absence keeps the original error.
+    // Fork-only: Claude Desktop's usage history is the last resort after a
+    // credential or login failure; its absence keeps the original error.
     claude_desktop::usage_history::or_desktop_history(
         poll_claude_code_with_credentials(),
         claude_desktop::usage_history::read_usage,
@@ -113,6 +113,30 @@ fn poll_claude_code_with_credentials() -> Result<UsageData, PollError> {
 /// default path — falls through to the desktop app. A custom export stays
 /// pinned, so a multi-account setup can never borrow another account's token.
 pub(super) fn poll_account(path: &Path) -> Result<UsageData, PollError> {
+    let result = poll_account_with_credentials(path);
+    // Fork-only: like the desktop token above, only the default profile may
+    // fall back to Claude Desktop's usage history; custom exports stay pinned.
+    if desktop_history_allowed(path) {
+        claude_desktop::usage_history::or_desktop_history(
+            result,
+            claude_desktop::usage_history::read_usage,
+        )
+    } else {
+        result
+    }
+}
+
+fn desktop_history_allowed(path: &Path) -> bool {
+    let Some(default) =
+        crate::accounts::default_credential_path(crate::providers::ProviderId::Claude)
+    else {
+        return false;
+    };
+    let explicit = std::env::var_os("CLAUDE_CONFIG_DIR").is_some_and(|value| !value.is_empty());
+    desktop_fallback_allowed(path, &default, explicit)
+}
+
+fn poll_account_with_credentials(path: &Path) -> Result<UsageData, PollError> {
     let mut credentials =
         match read_credentials_from_source(&CredentialSource::Windows(path.to_path_buf())) {
             Some(credentials) => credentials,
@@ -1005,6 +1029,21 @@ mod tests {
         // where the desktop app does have a usable token.
         let path = std::env::temp_dir().join("claude-custom-export.json");
         assert!(desktop_credentials_for_default_path(&path).is_none());
+    }
+
+    #[test]
+    fn only_the_default_profile_may_use_the_desktop_usage_history() {
+        // Fork-only: multi-account polling routes the default profile through
+        // poll_account, so the history fallback must follow the same scoping
+        // as the desktop token.
+        let custom = std::env::temp_dir().join("claude-custom-export.json");
+        assert!(!desktop_history_allowed(&custom));
+        let explicit = std::env::var_os("CLAUDE_CONFIG_DIR").is_some_and(|value| !value.is_empty());
+        if let Some(default) =
+            crate::accounts::default_credential_path(crate::providers::ProviderId::Claude)
+        {
+            assert_eq!(desktop_history_allowed(&default), !explicit);
+        }
     }
 
     #[test]
