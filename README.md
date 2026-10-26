@@ -10,6 +10,26 @@ or the [changelog](CHANGELOG.md) for version history and notable changes.
 
 ![Claude Code Usage Monitor running in the Windows taskbar](.github/animation.gif)
 
+## Custom Fork Notes
+
+This repository is a custom fork of [`CodeZeno/Claude-Code-Usage-Monitor`](https://github.com/CodeZeno/Claude-Code-Usage-Monitor). It is not the official CodeZeno release.
+
+Differences from upstream:
+
+- Adds a Claude Desktop local usage history fallback for Claude Code. It runs only after every upstream Claude path has failed (CLI credentials, the desktop app's token cache, token refresh, and the usage request); if it finds nothing, the original upstream error is shown unchanged.
+- Reads only `plan-usage-history.json` from the Claude Desktop data directories upstream already knows (`%LOCALAPPDATA%\Claude-Data\claude_*`, `%APPDATA%\Claude`, MSIX `Packages\Claude_*\LocalCache\Roaming\Claude`) plus `%LOCALAPPDATA%\Claude`.
+- Maps the newest sample's `u.fh` value to the 5-hour usage percentage and `u.sd` to the 7-day usage percentage, clamped to 0-100.
+- Leaves reset timestamps empty for that fallback because Claude Desktop history does not include exact reset times.
+- Applies the fallback to single-account Claude polling only, and not when `CLAUDE_CONFIG_DIR` is set; configured multi-account profiles keep upstream behavior.
+- Adds tests for newest-sample selection, percentage clamping, samples without timestamps, path discovery, and error preservation.
+- Adds a local maintenance guide for carrying this change forward after upstream updates.
+- Adds a custom GitHub Actions build that publishes a `custom-latest` prerelease from the `claude-desktop-history-fallback` branch.
+- Adds a PowerShell installer for downloading that custom build from this fork.
+
+The in-app updater still checks the official CodeZeno releases. Installing an update from it replaces this custom build with the official release, which does not include the fallback.
+
+Maintenance and reapply notes are in [`docs/claude-desktop-history-fallback-maintenance.md`](docs/claude-desktop-history-fallback-maintenance.md).
+
 ## Features
 
 - Displays current usage and time remaining until each limit resets
@@ -31,13 +51,43 @@ Claude Code credentials can be detected from the CLI, Claude desktop app, or WSL
 
 ## Installation
 
-Install the latest release with WinGet:
+GitHub Actions creates a plain portable `.exe` after every push to this fork's custom branch.
+
+Download the latest custom exe:
 
 ```powershell
-winget install CodeZeno.ClaudeCodeUsageMonitor
+irm https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe -OutFile .\claude-code-usage-monitor.exe
 ```
 
-Alternatively, download `claude-code-usage-monitor.exe` from [GitHub Releases](https://github.com/CodeZeno/Claude-Code-Usage-Monitor/releases).
+Run it directly:
+
+```powershell
+.\claude-code-usage-monitor.exe
+```
+
+For diagnostics:
+
+```powershell
+.\claude-code-usage-monitor.exe --diagnose
+```
+
+Optional one-command install with a Start Menu shortcut:
+
+```powershell
+$installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/ridvankuntug/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo ridvankuntug/Claude-Code-Usage-Monitor
+```
+
+That optional installer places the exe at `%LOCALAPPDATA%\ClaudeCodeUsageMonitorCustom\claude-code-usage-monitor.exe` and adds a **Claude Code Usage Monitor Custom** Start Menu shortcut. Installed-build diagnostics:
+
+```powershell
+& "$env:LOCALAPPDATA\ClaudeCodeUsageMonitorCustom\claude-code-usage-monitor.exe" --diagnose
+```
+
+The commands in the sections below assume the executable is on your `PATH`; otherwise run it by its full path.
+
+### Official upstream release
+
+Do not use `winget install CodeZeno.ClaudeCodeUsageMonitor` or the [CodeZeno GitHub Releases](https://github.com/CodeZeno/Claude-Code-Usage-Monitor/releases) for this fork. They install the official CodeZeno release, not this custom Claude Desktop history fallback build.
 
 See [updater verification](docs/updater.md) for the portable updater's integrity checks and trust boundary.
 

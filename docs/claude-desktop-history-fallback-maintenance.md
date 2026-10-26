@@ -6,217 +6,153 @@ This note is for carrying the local Claude Desktop usage history fallback forwar
 
 Keep this behavior available even after pulling new versions from `CodeZeno/Claude-Code-Usage-Monitor`:
 
-- Try the existing Claude Code OAuth usage polling first.
-- If OAuth polling fails, read Claude Desktop's local `plan-usage-history.json`.
-- Read only these history files:
+- Run upstream's Claude polling first, unchanged. Since v2.x upstream tries, in order, the CLI credentials (`~/.claude/.credentials.json`), the Claude desktop app's own DPAPI/OSCrypt-encrypted OAuth token cache, and WSL credentials, then refreshes the token and calls the usage endpoint (with its messages-header fallback).
+- Only if that whole chain returns an error, read Claude Desktop's local `plan-usage-history.json`.
+- If no usable history file is found, return the original upstream error unchanged, so the UI keeps showing upstream's states (sign in again, retrying, HTTP status, ...).
+- The fallback reads only `plan-usage-history.json`. It does not touch tokens, cookies, Local Storage, or `Network\Cookies` itself; upstream's own desktop token reader is left as is.
+- History files are searched, first readable and parseable file wins, in this order:
+  - `%LOCALAPPDATA%\Claude-Data\claude_<publisher>\plan-usage-history.json` (migrated desktop data; `claude_pzs8sxrjxfjjc` first)
   - `%APPDATA%\Claude\plan-usage-history.json`
-  - `%LOCALAPPDATA%\Claude\plan-usage-history.json`
-  - `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\plan-usage-history.json`
-- Do not read Claude Desktop tokens, cookies, Local Storage, or `Network\Cookies`.
-- Pick the sample with the highest `t`.
-- Map `u.fh` to `session.percentage`.
-- Map `u.sd` to `weekly.percentage`.
-- Clamp both percentages to `0..100`.
-- Leave both `resets_at` values as `None`.
+  - `%LOCALAPPDATA%\Packages\Claude_<publisher>\LocalCache\Roaming\Claude\plan-usage-history.json` (MSIX)
+  - `%LOCALAPPDATA%\Claude\plan-usage-history.json` (fork's legacy candidate)
 
-## Before Pulling Upstream
+  The first three come from upstream's `claude_desktop::data_directories_in()`, so new upstream desktop locations are picked up automatically. Duplicates are dropped while keeping upstream's order.
+- Pick the sample with the highest `t` (Unix milliseconds; samples without `t` rank oldest).
+- Map `u.fh` to `session.percentage` and `u.sd` to `weekly.percentage`; both must be present.
+- Clamp both percentages to `0..100`, mark both windows `available`, and leave both `resets_at` values as `None`.
 
-Save the current local fallback change as a patch:
+### Scope and limits
 
-```powershell
-git diff -- src\poller.rs README.md docs\claude-desktop-history-fallback-maintenance.md > claude-desktop-history-fallback.patch
+- The fallback is wired into `claude::poll_claude_code()`, the single-account Claude poller. Configured multi-account profiles (`claude::poll_account()`) keep upstream behavior. Samples carry an `org` id, but upstream profiles do not know their organization id without an extra API call, so a profile-to-sample mapping is not attempted.
+- Like upstream's desktop token lookup, a non-empty `CLAUDE_CONFIG_DIR` is treated as an explicit account selection: the fallback is skipped and the upstream error is returned.
+- Desktop history does not include reset times, so the countdown is empty while the fallback is in use.
+- The newest sample is used as is, however old it is.
+
+## Where The Code Lives
+
+| Piece | Location |
+| --- | --- |
+| Fallback module (parser, path discovery, wrapper, tests) | `src/poller/claude_desktop/usage_history.rs` |
+| Module declaration | `src/poller/claude_desktop.rs`: `pub(super) mod usage_history;` |
+| Hook | `src/poller/claude.rs`: `poll_claude_code()` wraps upstream's body, now `poll_claude_code_with_credentials()` |
+| Custom build | `.github/workflows/custom-build.yml` |
+| Installer | `scripts/install-custom.ps1` |
+| Fork notes and custom install | `README.md` ("Custom Fork Notes", "Installation") |
+
+The hook is intentionally tiny:
+
+```rust
+pub(super) fn poll_claude_code() -> Result<UsageData, PollError> {
+    claude_desktop::usage_history::or_desktop_history(
+        poll_claude_code_with_credentials(),
+        claude_desktop::usage_history::read_usage,
+    )
+}
 ```
 
-Optionally keep a copy outside the repository too:
+`or_desktop_history` returns the upstream result on success, otherwise the fallback result, otherwise the original error.
 
-```powershell
-Copy-Item -Force .\claude-desktop-history-fallback.patch ..\claude-desktop-history-fallback.patch
-```
-
-Check what is currently modified:
-
-```powershell
-git status --short
-```
-
-## Pulling A New Upstream Version
+## Remotes
 
 This local clone uses:
 
-- `origin` for `ridvankuntug/Claude-Code-Usage-Monitor`
-- `upstream` for `CodeZeno/Claude-Code-Usage-Monitor`
+- `origin` for `CodeZeno/Claude-Code-Usage-Monitor` (upstream)
+- `fork` for `ridvankuntug/Claude-Code-Usage-Monitor` (this fork)
 
-Fetch the latest upstream changes:
+## Pulling A New Upstream Version
+
+Fetch and review upstream:
 
 ```powershell
-git fetch upstream
+git fetch origin
+git log --oneline --decorate --max-count 20 origin/main
+git diff --stat HEAD...origin/main
+git diff HEAD...origin/main -- src/poller/claude.rs src/poller/claude_desktop.rs
 ```
 
-Review what changed upstream before applying anything:
+Merge upstream into a working branch created from the custom branch (merge, not rebase, so the fork history stays intact):
 
 ```powershell
-git log --oneline --decorate --max-count 20 upstream/main
-git diff --stat main..upstream/main
-git diff main..upstream/main -- src\poller.rs
-```
-
-Update local `main`, then rebase the custom branch on top of it:
-
-```powershell
-git switch main
-git merge upstream/main
-git push origin main
-
 git switch claude-desktop-history-fallback
-git rebase main
-git push origin claude-desktop-history-fallback --force-with-lease
+git switch -c story/upstream-vX.Y.Z-senkron
+git merge origin/main
 ```
 
-The branch push will trigger the custom GitHub Actions build and refresh the `custom-latest` prerelease.
+Typical conflict points and what to check:
 
-## Reapplying The Fallback
+- `src/poller/claude.rs`: keep upstream's polling body inside `poll_claude_code_with_credentials()` and keep the wrapper in `poll_claude_code()`. If upstream renames or splits `poll_claude_code`, hook the wrapper into whatever function `PROVIDER_POLLERS` uses for `ProviderId::Claude`.
+- `src/poller/claude_desktop.rs`: keep the `pub(super) mod usage_history;` line. If upstream renames `data_directories_in()`, update the call in `usage_history.rs`.
+- `README.md`: take upstream's version, then reapply "Custom Fork Notes" and the custom "Installation" section.
+- `.github/workflows/custom-build.yml`: keep the Rust version in sync with `rust-toolchain.toml` and `.github/workflows/release.yml`, and keep the asset name `claude-code-usage-monitor.exe` in sync with `scripts/install-custom.ps1`.
 
-After updating or recloning, apply the saved patch:
+After the merge is verified, fast-forward the custom branch and push it to the fork (this triggers the custom build):
 
 ```powershell
-git apply --reject --whitespace=nowarn .\claude-desktop-history-fallback.patch
+git switch claude-desktop-history-fallback
+git merge --ff-only story/upstream-vX.Y.Z-senkron
+git push fork claude-desktop-history-fallback
 ```
-
-If the patch applies cleanly, inspect the result:
-
-```powershell
-git diff -- src\poller.rs
-```
-
-If `.rej` files appear, reapply the change manually in `src\poller.rs`.
-
-## Manual Reapply Checklist
-
-In `src/poller.rs`, keep these pieces:
-
-1. Claude Desktop history structs:
-   - `ClaudeDesktopPlanUsageHistory`
-   - `ClaudeDesktopPlanUsageSample`
-   - `ClaudeDesktopPlanUsage`
-
-2. `poll_claude_code()` wrapper:
-
-```rust
-fn poll_claude_code() -> Result<UsageData, PollError> {
-    match poll_claude_code_oauth() {
-        Ok(data) => Ok(data),
-        Err(error) => {
-            diagnose::log(format!(
-                "Claude Code OAuth usage poll failed: {error:?}; trying Claude Desktop history"
-            ));
-            read_claude_desktop_usage().ok_or(error)
-        }
-    }
-}
-```
-
-3. Keep the original OAuth logic in:
-
-```rust
-fn poll_claude_code_oauth() -> Result<UsageData, PollError> {
-    // original Claude Code OAuth polling logic
-}
-```
-
-4. History file discovery:
-   - `%APPDATA%\Claude\plan-usage-history.json`
-   - `%LOCALAPPDATA%\Claude\plan-usage-history.json`
-   - `%LOCALAPPDATA%\Packages\Claude_*\LocalCache\Roaming\Claude\plan-usage-history.json`
-
-5. Parser behavior:
-
-```rust
-fn claude_desktop_usage_from_history(content: &str) -> Option<UsageData> {
-    let history: ClaudeDesktopPlanUsageHistory = serde_json::from_str(content).ok()?;
-    let sample = history.samples.into_iter().max_by_key(|sample| sample.t)?;
-
-    Some(UsageData {
-        session: UsageSection {
-            percentage: sample.u.fh?.clamp(0.0, 100.0),
-            resets_at: None,
-        },
-        weekly: UsageSection {
-            percentage: sample.u.sd?.clamp(0.0, 100.0),
-            resets_at: None,
-        },
-    })
-}
-```
-
-6. Tests:
-   - newest sample is selected by highest `t`
-   - percentages are clamped to `0..100`
 
 ## Build And Verify
 
-Use the Visual Studio x64 build environment:
+Run the same checks as CI:
 
 ```powershell
-cmd.exe /d /s /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && set CARGO_HTTP_CHECK_REVOKE=false&& "%USERPROFILE%\.cargo\bin\cargo.exe" test'
-cmd.exe /d /s /c '"C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" && set CARGO_HTTP_CHECK_REVOKE=false&& "%USERPROFILE%\.cargo\bin\cargo.exe" build --release'
+cargo fmt --check
+cargo test --locked
+cargo build --release --locked
 ```
 
-Copy the portable executable:
+Fallback-only tests:
 
 ```powershell
-New-Item -ItemType Directory -Force -Path .\outputs | Out-Null
-Copy-Item -Force .\target\release\claude-code-usage-monitor.exe .\outputs\claude-code-usage-monitor.exe
+cargo test usage_history
 ```
+
+They cover newest-sample selection, clamping, samples without `t`, rejected or incomplete history, path discovery and de-duplication, and that the original error is kept when no history exists.
+
+### Machines without a full Windows SDK
+
+`winresource` finds `rc.exe` through the `RC_PATH` environment variable, a Developer Command Prompt (`WindowsSdkVerBinPath`), or the installed Windows Kits registry entries. If none of these exist, for example a Visual Studio install with only the ScopeCppSDK, point `RC_PATH` at an `rc.exe` before building; no `build.rs` change is needed:
+
+```powershell
+$env:RC_PATH = "C:\Program Files\Microsoft Visual Studio\2022\Professional\SDK\ScopeCppSDK\vc15\SDK\bin\rc.exe"
+```
+
+Use a Visual Studio x64 developer environment (`vcvars64.bat`) for the MSVC linker. In Git Bash, make sure `/usr/bin/link` does not shadow MSVC's `link.exe`.
 
 ## Automatic Custom Builds
 
-This branch includes `.github/workflows/custom-build.yml`.
+When `claude-desktop-history-fallback` is pushed to the fork, `.github/workflows/custom-build.yml` will:
 
-When `claude-desktop-history-fallback` is pushed to your own GitHub repository, GitHub Actions will:
-
-1. Run `cargo test`.
-2. Run `cargo build --release`.
+1. Run `cargo test --locked`.
+2. Run `cargo build --release --locked`.
 3. Move the `custom-latest` tag to the pushed commit.
 4. Replace the `custom-latest` prerelease.
 5. Upload `claude-code-usage-monitor.exe` as the release asset.
 
-No extra GitHub secret is required for this workflow. It uses the built-in `GITHUB_TOKEN` with `contents: write`.
-
-Your repository settings must allow GitHub Actions to write repository contents:
+No extra GitHub secret is required. It uses the built-in `GITHUB_TOKEN` with `contents: write`. The repository must allow it:
 
 ```text
 Settings -> Actions -> General -> Workflow permissions -> Read and write permissions
 ```
 
-After adding your fork as `origin`, push the branch:
-
-```powershell
-git push -u origin claude-desktop-history-fallback
-```
-
-The custom release asset will be available at:
+The custom release asset is available at:
 
 ```text
 https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe
 ```
 
-## Downloading The Plain Exe
+## Downloading And Installing
 
-Download the latest GitHub-built custom exe:
+Plain exe:
 
 ```powershell
 irm https://github.com/ridvankuntug/Claude-Code-Usage-Monitor/releases/download/custom-latest/claude-code-usage-monitor.exe -OutFile .\claude-code-usage-monitor.exe
-```
-
-Run it directly:
-
-```powershell
 .\claude-code-usage-monitor.exe --diagnose
 ```
 
-## Optional Local Install Helper
-
-From a local clone:
+Optional install helper from a local clone:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install-custom.ps1 -Repo ridvankuntug/Claude-Code-Usage-Monitor
@@ -228,27 +164,25 @@ Directly from GitHub:
 $installer = Join-Path $env:TEMP "install-claude-code-usage-monitor-custom.ps1"; irm https://raw.githubusercontent.com/ridvankuntug/Claude-Code-Usage-Monitor/claude-desktop-history-fallback/scripts/install-custom.ps1 -OutFile $installer; powershell -ExecutionPolicy Bypass -File $installer -Repo ridvankuntug/Claude-Code-Usage-Monitor
 ```
 
-Confirm line endings and whitespace:
-
-```powershell
-git diff --check
-$bytes = [System.IO.File]::ReadAllBytes('src\poller.rs'); $lf=0; $crlf=0; for($i=0;$i -lt $bytes.Length;$i++){ if($bytes[$i] -eq 10){ $lf++; if($i -gt 0 -and $bytes[$i-1] -eq 13){$crlf++} } }; "LF=$lf CRLF=$crlf"
-```
-
 ## Runtime Smoke Test
 
-Run the custom executable directly instead of installing with WinGet:
+Run the custom executable with diagnostics and enable recording in the dashboard's **Diagnostics** page if needed:
 
 ```powershell
-.\outputs\claude-code-usage-monitor.exe --diagnose
+.\claude-code-usage-monitor.exe --diagnose
 ```
 
-Look for logs like:
+When upstream polling fails and the fallback is used, the log shows lines like:
 
 ```text
-Claude Code OAuth usage poll failed: NoCredentials; trying Claude Desktop history
-using Claude Desktop usage history at ...\Packages\Claude_...\LocalCache\Roaming\Claude\plan-usage-history.json
+Claude usage poll failed: NoCredentials; trying Claude Desktop usage history
+using Claude Desktop usage history at ...\Claude-Data\claude_...\plan-usage-history.json
 ```
 
-Do not use WinGet to reinstall for this custom build. WinGet installs the official release and will replace this local fallback behavior unless upstream has accepted the same change.
+When no history is usable:
 
+```text
+Claude Desktop usage history not found
+```
+
+Do not reinstall with WinGet or accept the in-app updater for this custom build. Both install the official CodeZeno release (the updater follows `repository` in `Cargo.toml`), which replaces the fallback behavior.
