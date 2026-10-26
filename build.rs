@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use winres::{VersionInfo, WindowsResource};
 
 fn main() {
@@ -13,7 +15,27 @@ fn main() {
         .set_version_info(VersionInfo::FILEVERSION, numeric_version)
         .set_version_info(VersionInfo::PRODUCTVERSION, numeric_version);
 
+    if let Some(toolkit_path) = local_windows_sdk_toolkit_path() {
+        res.set_toolkit_path(&toolkit_path);
+    }
+
     res.compile().expect("Failed to compile Windows resources");
+}
+
+fn local_windows_sdk_toolkit_path() -> Option<String> {
+    if let Ok(path) = std::env::var("WINRES_TOOLKIT_PATH") {
+        if Path::new(&path).join("rc.exe").exists() {
+            return Some(path);
+        }
+    }
+
+    [
+        r"C:\Program Files\Microsoft Visual Studio\2022\Professional\SDK\ScopeCppSDK\vc15\SDK\bin",
+        r"C:\Program Files\Microsoft Visual Studio\18\Professional\SDK\ScopeCppSDK\vc15\SDK\bin",
+    ]
+    .into_iter()
+    .find(|path| Path::new(path).join("rc.exe").exists())
+    .map(str::to_string)
 }
 
 fn pack_version(version: &str) -> u64 {
